@@ -13,7 +13,7 @@ pygame.init()
 FRAMES_PER_SECOND = 60
 
 SCREEN_WIDTH    = 800
-SCREEN_HEIGHT   = 800
+SCREEN_HEIGHT   = 400
 SCREEN_SIZE     = (SCREEN_WIDTH, SCREEN_HEIGHT)
 
 WHITE       = numpy.asarray((255, 255, 255))
@@ -27,25 +27,43 @@ DARK_GREEN  = numpy.asarray((25, 68, 25))
 DARK_BLUE   = numpy.asarray((25, 25, 64))
 
 def init():
-    global screen, terrain, font, clock
+    global screen, map_, font, clock
+    map_ = generate_map()
     screen = pygame.display.set_mode(SCREEN_SIZE)
-    terrain_size = (400, 400)
-    terrain = generate_terrain(terrain_size, seed=2)
     font = pygame.font.Font(pygame.font.get_default_font(), 12)
     clock = pygame.time.Clock()
 
-def generate_terrain(size, seed=0):
-    random.seed(seed)
-    (width, height) = size
+def generate_map():
+    size = (width, height) = (800, 400)
+    terrain = generate_terrain(size)
     data = numpy.ndarray((width, height, 3), dtype=int)
+
+    for i in xrange(width):
+        for j in xrange(height):
+            color = terrain_color(terrain[i,j])
+            data[i,j] = color
+
+    map_ = pygame.Surface(size)
+    pygame.surfarray.blit_array(map_, data)
+
+    # Output map to file
+    scipy.misc.imsave('map.png', data.T)
+
+    return map_
+
+def generate_terrain(size, seed=None):
+    if seed:
+        random.seed(seed)
+
+    scale = min(size) / min(SCREEN_SIZE)
 
     threshold_pos_bin   = numpy.vectorize(lambda x: 1 if x > 0.0 else 0.0)
     threshold_pos       = numpy.vectorize(lambda x: x if x > 0.0 else 0.0)
     threshold_neg       = numpy.vectorize(lambda x: x if x < 0.0 else 0.0)
 
-    water_data      = generate_heightmap(size, 32, 8, 0.25)
-    hills_data      = generate_heightmap(size, 16, 8, 0.25)
-    mountains_data  = generate_heightmap(size, 32, 8, 0.75)
+    water_data      = generate_heightmap(size, scale * 64, 8, 0.25)
+    hills_data      = generate_heightmap(size, scale * 32, 8, 0.25)
+    mountains_data  = generate_heightmap(size, scale * 64, 8, 0.75)
 
     ground_level = 0.1
     water = threshold_neg(water_data)
@@ -53,20 +71,12 @@ def generate_terrain(size, seed=0):
     mountains = 1.0 + abs(mountains_data)
 
     land_mask = threshold_pos(scipy.ndimage.filters.gaussian_filter(
-        threshold_pos_bin(water_data) - ground_level, 32))
-    mountains_mask = threshold_pos(generate_heightmap(size, 32, 8, 0.25))
+        threshold_pos_bin(water_data) - ground_level, 4 / scale))
+    mountains_mask = threshold_pos(generate_heightmap(size, scale * 64, 8, 0.25))
 
     terrain = ground_level + water + land_mask * (hills + mountains_mask * mountains)
 
-    for i in xrange(width):
-        for j in xrange(height):
-            color = terrain_color(terrain[i,j])
-            data[i,j] = color
-
-    surface = pygame.Surface(size)
-    pygame.surfarray.blit_array(surface, data)
-
-    return surface
+    return terrain
 
 def generate_heightmap(size, freq=16, octaves=1, persistence=0.5):
     (width, height) = size
@@ -111,8 +121,8 @@ def process_input(event):
         running = False
 
 def draw_frame():
-    # Draw terrain
-    pygame.transform.scale(terrain, (SCREEN_WIDTH, SCREEN_HEIGHT), screen)
+    # Draw map
+    pygame.transform.scale(map_, (SCREEN_WIDTH, SCREEN_HEIGHT), screen)
 
     # Display FPS
     fps = font.render('FPS: %d' % clock.get_fps(), True, WHITE)
