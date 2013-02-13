@@ -6,6 +6,7 @@ import pygame
 import numpy
 import noise
 import random
+import scipy.ndimage
 
 pygame.init()
 
@@ -38,22 +39,28 @@ def generate_terrain(size, seed=0):
     (width, height) = size
     data = numpy.ndarray((width, height, 3), dtype=int)
 
-    threshold = numpy.vectorize(lambda x: x if x < 0.0 else 0.0)
-    ground = 0.1
-    water = threshold(generate_heightmap(size, 32, 8, 0.25))
-    hills = 0.5 * (0.5 + 0.5 * generate_heightmap(size, 16, 8, 0.25))
-    mountains = 0.5 + abs(generate_heightmap(size, 32, 8, 0.75))
+    threshold_pos_bin   = numpy.vectorize(lambda x: 1 if x > 0.0 else 0.0)
+    threshold_pos       = numpy.vectorize(lambda x: x if x > 0.0 else 0.0)
+    threshold_neg       = numpy.vectorize(lambda x: x if x < 0.0 else 0.0)
 
-    threshold = numpy.vectorize(lambda x: x if x > 0.0 else 0.0)
-    hills_mask = 1 - water
-    mountains_mask = threshold(generate_heightmap(size, 32, 8, 0.25))
+    water_data      = generate_heightmap(size, 32, 8, 0.25)
+    hills_data      = generate_heightmap(size, 16, 8, 0.25)
+    mountains_data  = generate_heightmap(size, 32, 8, 0.75)
 
-    terrain = mountains_mask
+    ground_level = 0.1
+    water = threshold_neg(water_data)
+    hills = 0.5 * (0.5 + 0.5 * hills_data)
+    mountains = 1.0 + abs(mountains_data)
+
+    land_mask = threshold_pos(scipy.ndimage.filters.gaussian_filter(
+        threshold_pos_bin(water_data) - ground_level, 32))
+    mountains_mask = threshold_pos(generate_heightmap(size, 32, 8, 0.25))
+
+    terrain = ground_level + water + land_mask * (hills + mountains_mask * mountains)
 
     for i in xrange(width):
         for j in xrange(height):
-            #color = terrain_color(terrain[i,j])
-            color = terrain[i,j] * WHITE
+            color = terrain_color(terrain[i,j])
             data[i,j] = color
 
     surface = pygame.Surface(size)
@@ -74,7 +81,7 @@ def generate_heightmap(size, freq=16, octaves=1, persistence=0.5):
 
 def terrain_color(height):
     colors  = [DARK_BLUE, BLUE, BEIGE, GREEN, DARK_GREEN, BROWN, GRAY, WHITE]
-    heights = [-0.1, 0.0, 0.01, 0.2, 0.4, 0.6, 0.7, 0.9]
+    heights = [-0.1, 0.0, 0.01, 0.2, 0.4, 0.6, 0.7, 0.8]
 
     # Check lower bound
     if height < heights[0]:
