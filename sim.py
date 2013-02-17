@@ -7,10 +7,11 @@ import pygame
 import struct
 import terrain_generator
 import simulator
+import entity
 
 pygame.init()
 
-FRAMES_PER_SECOND = 60
+VIEWPORTS_PER_SECOND = 60
 
 WINDOW_WIDTH    = 800
 WINDOW_HEIGHT   = 800
@@ -18,14 +19,14 @@ SCREEN_WIDTH    = 100
 SCREEN_HEIGHT   = 100
 TERRAIN_WIDTH   = 800
 TERRAIN_HEIGHT  = 800
-FRAME_WIDTH     = SCREEN_WIDTH
-FRAME_HEIGHT    = int(SCREEN_HEIGHT * 3 / 4)
+VIEWPORT_WIDTH  = SCREEN_WIDTH
+VIEWPORT_HEIGHT = int(SCREEN_HEIGHT * 3 / 4)
 MINIMAP_WIDTH   = int(SCREEN_WIDTH / 4) - 1
 MINIMAP_HEIGHT  = int(SCREEN_HEIGHT / 4) - 1
 WINDOW_SIZE     = (WINDOW_WIDTH, WINDOW_HEIGHT)
 SCREEN_SIZE     = (SCREEN_WIDTH, SCREEN_HEIGHT)
 TERRAIN_SIZE    = (TERRAIN_WIDTH, TERRAIN_HEIGHT)
-FRAME_SIZE      = (FRAME_WIDTH, FRAME_HEIGHT)
+VIEWPORT_SIZE   = (VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 MINIMAP_SIZE    = (MINIMAP_WIDTH, MINIMAP_HEIGHT)
 
 WHITE       = numpy.asarray((255, 255, 255))
@@ -39,9 +40,9 @@ BLUE        = numpy.asarray((25, 25, 128))
 DARK_GREEN  = numpy.asarray((25, 68, 25))
 DARK_BLUE   = numpy.asarray((25, 25, 64))
 
-fps_on = False
+overlay_on = False
 
-frame_position = (0, 0)
+viewport = pygame.Rect((0, 0), VIEWPORT_SIZE)
 
 simulator = simulator.Simulator()
 
@@ -68,7 +69,7 @@ def init():
     minimap_area = pygame.Rect((0, 0), MINIMAP_SIZE)
 
     screen.fill(GRAY)
-    pygame.draw.line(screen, BLACK, (0, FRAME_HEIGHT), (SCREEN_WIDTH, FRAME_HEIGHT))
+    pygame.draw.line(screen, BLACK, (0, VIEWPORT_HEIGHT), (SCREEN_WIDTH, VIEWPORT_HEIGHT))
 
     simulator.start()
 
@@ -147,11 +148,11 @@ def lerp(a, b, t):
     return (1 - t) * a + t * b
 
 def process_input(event):
-    global fps_on, frame_position
+    global overlay_on, viewport
 
     if event.type == pygame.KEYUP:
-        if event.key == ord('f'):
-            fps_on = not fps_on
+        if event.key == ord('o'):
+            overlay_on = not overlay_on
         elif event.key == ord('s'):
             save_map_as_image('map', map_data)
         elif event.key == ord('t'):
@@ -159,13 +160,30 @@ def process_input(event):
         elif event.key == pygame.K_ESCAPE:
             exit()
     elif (event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 or
+        # TODO mark here if pressed inside viewport
         event.type == pygame.MOUSEMOTION and pygame.mouse.get_pressed()[0]):
         (x, y) = event.pos
-        (x, y) = pos = (int(x * (SCREEN_WIDTH / WINDOW_WIDTH)),
-            int(y * (SCREEN_HEIGHT / WINDOW_HEIGHT)) - (FRAME_HEIGHT + 1))
+        x = int(x * (SCREEN_WIDTH / WINDOW_WIDTH))
+        y = int(y * (SCREEN_HEIGHT / WINDOW_HEIGHT)) - (VIEWPORT_HEIGHT + 1)
+        pos = (x, y)
         if minimap_area.contains(pygame.Rect(pos, (1, 1))):
-            frame_position = (x * (TERRAIN_WIDTH / MINIMAP_WIDTH) - FRAME_WIDTH / 2,
-                y * (TERRAIN_HEIGHT / MINIMAP_HEIGHT) - FRAME_HEIGHT / 2)
+            x = x * (TERRAIN_WIDTH / MINIMAP_WIDTH) - VIEWPORT_WIDTH / 2
+            y = y * (TERRAIN_HEIGHT / MINIMAP_HEIGHT) - VIEWPORT_HEIGHT / 2
+            (viewport.left, viewport.top) = (x, y)
+    elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+        # TODO only place humans if the mouse pressed started inside
+        # the viewport
+        (x, y) = event.pos
+        x = int(x * (SCREEN_WIDTH / WINDOW_WIDTH))
+        y = int(y * (SCREEN_HEIGHT / WINDOW_HEIGHT))
+        pos = (x, y)
+        if pygame.Rect((0, 0), VIEWPORT_SIZE).contains(pos, (1, 1)):
+            x = x + viewport.left
+            y = y + viewport.top
+            pos = (x, y)
+            human = entity.Human(pos)
+            simulator.add_entity(human)
+
     elif event.type == pygame.QUIT:
         exit()
 
@@ -176,9 +194,9 @@ def exit():
     running = False
 
 def process_state():
-    global frame_position
+    global viewport
 
-    (x, y) = frame_position
+    (x, y) = (viewport.left, viewport.top)
     pressed = pygame.key.get_pressed()
     if pressed[pygame.K_UP]:
         y -= 2
@@ -190,42 +208,47 @@ def process_state():
         x += 2
 
     x = max(x, 0)
-    x = min(x, TERRAIN_WIDTH - FRAME_WIDTH)
+    x = min(x, TERRAIN_WIDTH - VIEWPORT_WIDTH)
     y = max(y, 0)
-    y = min(y, TERRAIN_HEIGHT - FRAME_HEIGHT)
-    frame_position = (x, y)
+    y = min(y, TERRAIN_HEIGHT - VIEWPORT_HEIGHT)
+    (viewport.left, viewport.top) = (x, y)
 
 def draw_frame():
     # Draw map
-    area = pygame.Rect(frame_position, FRAME_SIZE)
-    screen.blit(map_, (0, 0), area)
+    screen.blit(map_, (0, 0), viewport)
 
     # Draw entities
-    entities = simulator.get_entities(frame_position, FRAME_SIZE)
+    entities = simulator.get_entities(viewport)
     for entity in entities:
         draw_entity(entity)
 
     # Draw GUI
     pygame.transform.scale(map_, MINIMAP_SIZE, minimap)
-    (x, y) = frame_position
+    (x, y) = (viewport.left, viewport.top)
     position = ((x / TERRAIN_WIDTH) * MINIMAP_WIDTH - 1,
         (y / TERRAIN_HEIGHT) * MINIMAP_HEIGHT)
-    size = ((FRAME_WIDTH / TERRAIN_WIDTH) * MINIMAP_WIDTH + 2,
-        (FRAME_HEIGHT / TERRAIN_HEIGHT) * MINIMAP_HEIGHT + 2)
+    size = ((VIEWPORT_WIDTH / TERRAIN_WIDTH) * MINIMAP_WIDTH + 2,
+        (VIEWPORT_HEIGHT / TERRAIN_HEIGHT) * MINIMAP_HEIGHT + 2)
     rect = pygame.Rect(position, size)
     pygame.draw.rect(minimap, WHITE, rect, 1)
-    screen.blit(minimap, (0, FRAME_HEIGHT + 1))
+    screen.blit(minimap, (0, VIEWPORT_HEIGHT + 1))
 
     # Copy screen to window
     pygame.transform.scale(screen, WINDOW_SIZE, window)
 
-    if fps_on:
+    if overlay_on:
         # Display FPS
         fps = font.render('FPS: %d' % clock.get_fps(), True, WHITE)
         window.blit(fps, (10, 10))
+        # Display simulator tick
+        tick = font.render('Tick: %d' % simulator.tick, True, WHITE)
+        window.blit(tick, (10, 26))
 
 def draw_entity(entity):
-    pos = entity.pos
+    (x, y) = entity.pos
+    x = x - viewport.left
+    y = y - viewport.top
+    pos = (x, y)
     screen.blit(entity.image, pos)
 
 def main_loop():
@@ -241,7 +264,7 @@ def main_loop():
 
         pygame.display.flip()
 
-        clock.tick(FRAMES_PER_SECOND)
+        clock.tick(VIEWPORTS_PER_SECOND)
 
 init()
 main_loop()
