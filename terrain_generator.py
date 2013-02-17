@@ -19,12 +19,12 @@ def generate_terrain(size, scale=1.0, seed=None):
 
     ground_level = 0.1
     water = threshold_neg(water_data)
-    hills = 0.5 * (0.5 + 0.5 * hills_data)
-    mountains = 0.3 + abs(mountains_data)
+    hills = 0.25 + 0.25 * hills_data
+    mountains = 0.6 + abs(mountains_data)
 
     land_mask = threshold_pos(scipy.ndimage.filters.gaussian_filter(
         threshold_pos_bin(water_data) - ground_level, 8 / scale))
-    mountains_mask = threshold_pos(generate_heightmap(size, scale * 1, 8, 0.25) - 0.2)
+    mountains_mask = 2 * threshold_pos(generate_heightmap(size, scale * 1, 8, 0.25) - 0.4)
 
     terrain = ground_level + water + land_mask * (hills + mountains_mask * mountains)
 
