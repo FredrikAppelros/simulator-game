@@ -4,6 +4,7 @@ from __future__ import division
 
 import numpy
 import pygame
+import struct
 import terrain_generator
 
 pygame.init()
@@ -55,6 +56,36 @@ def generate_map(terrain):
 
     return data
 
+def save_map_as_image(filename, data):
+    scipy.misc.imsave(filename + '.png', data.T)
+
+def save_map_as_terrain(filename, data):
+    def h(i):
+        return struct.pack('h', i)
+    h_max = numpy.iinfo(numpy.int16).max
+    size = h(min(data.shape) - 1)
+    xpts = h(data.shape[0])
+    ypts = h(data.shape[1])
+    height_scale = h(350)
+    base_height = h(10)
+    padding = h(0)
+    with open(filename + '.ter', 'wb') as f:
+        f.write('TERRAGENTERRAIN SIZE')
+        f.write(size)
+        f.write(padding)
+        f.write('XPTS')
+        f.write(xpts)
+        f.write(padding)
+        f.write('YPTS')
+        f.write(ypts)
+        f.write(padding)
+        f.write('ALTW')
+        f.write(height_scale)
+        f.write(base_height)
+        for val in data.flatten():
+            f.write(h(val * h_max))
+        f.write('EOF')
+
 def height_color(height):
     if height < 0:
         return lerp(BLUE, BLACK, height + 1)
@@ -95,9 +126,9 @@ def process_input(event):
         if event.key == ord('f'):
             fps_on = not fps_on
         if event.key == ord('s'):
-            map_generator.save_map_as_image('map', map_data)
+            save_map_as_image('map', map_data)
         if event.key == ord('t'):
-            map_generator.save_map_as_terrain('map', terrain_data)
+            save_map_as_terrain('map', terrain_data)
         elif event.key == 27:
             running = False
 

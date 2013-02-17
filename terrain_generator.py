@@ -3,38 +3,7 @@ from __future__ import division
 import numpy
 import noise
 import random
-import struct
 import scipy.ndimage
-
-def save_map_as_image(filename, data):
-    scipy.misc.imsave(filename + '.png', data.T)
-
-def save_map_as_terrain(filename, data):
-    def h(i):
-        return struct.pack('h', i)
-    h_max = numpy.iinfo(numpy.int16).max
-    size = h(min(data.shape) - 1)
-    xpts = h(data.shape[0])
-    ypts = h(data.shape[1])
-    height_scale = h(350)
-    base_height = h(10)
-    padding = h(0)
-    with open(filename + '.ter', 'wb') as f:
-        f.write('TERRAGENTERRAIN SIZE')
-        f.write(size)
-        f.write(padding)
-        f.write('XPTS')
-        f.write(xpts)
-        f.write(padding)
-        f.write('YPTS')
-        f.write(ypts)
-        f.write(padding)
-        f.write('ALTW')
-        f.write(height_scale)
-        f.write(base_height)
-        for val in data.flatten():
-            f.write(h(val * h_max))
-        f.write('EOF')
 
 def generate_terrain(size, scale=1.0, seed=None):
     if seed:
