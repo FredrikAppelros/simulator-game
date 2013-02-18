@@ -8,6 +8,7 @@ class Simulator(threading.Thread):
     def __init__(self):
         super(Simulator, self).__init__()
         self.daemon     = True
+        # TODO instead of a simple list this should be a quadtree
         self.entities   = []
         self.tick       = 0
 
