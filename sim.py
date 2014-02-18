@@ -3,6 +3,7 @@
 from __future__ import division
 
 import numpy
+import scipy
 import pygame
 import struct
 import terrain_generator
